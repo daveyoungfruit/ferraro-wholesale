@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Ferraro Wholesale Produce Log</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Mono', monospace; background: #f7f5f0; min-height: 100vh; }
+  input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+  .tab { cursor:pointer; padding:8px 18px; font-size:11px; letter-spacing:0.12em; border:1px solid #ccc; background:transparent; font-family:'DM Mono',monospace; transition:all 0.15s; }
+  .tab.active { background:#1a1a1a; color:#f7f5f0; border-color:#1a1a1a; }
+  .tab:hover:not(.active) { background:#eee; }
+  .num-in { padding:6px 6px; border:1px solid #ccc; background:#fff; font-family:'DM Mono',monospace; font-size:13px; text-align:center; border-radius:3px; width:100%; }
+  .num-in:focus { outline:none; border-color:#1a1a1a; }
+  .btn-main { background:#1a1a1a; color:#f7f5f0; border:none; padding:12px 28px; font-family:'DM Mono',monospace; font-size:12px; letter-spacing:0.1em; cursor:pointer; transition:opacity 0.15s; width:100%; }
+  .btn-main:hover { opacity:0.8; }
+  .btn-main:disabled { opacity:0.4; cursor:default; }
+  .btn-ghost { background:transparent; color:#555; border:1px solid #bbb; padding:10px 20px; font-family:'DM Mono',monospace; font-size:12px; letter-spacing:0.08em; cursor:pointer; transition:all 0.15s; width:100%; }
+  .btn-ghost:hover { border-color:#555; color:#1a1a1a; }
+  .txt-in { padding:6px 8px; border:1px solid #ccc; background:#fff; font-family:'DM Mono',monospace; font-size:12px; border-radius:3px; width:100%; }
+  .txt-in:focus { outline:none; border-color:#1a1a1a; }
+  .webhook-in { padding:8px 10px; border:1px solid #ccc; background:#fff; font-family:'DM Mono',monospace; font-size:11px; border-radius:3px; width:100%; }
+  .webhook-in:focus { outline:none; border-color:#1a1a1a; }
+  .override { padding:4px 6px; border:1px solid #ddd; font-family:'DM Mono',monospace; font-size:12px; border-radius:3px; background:#fafffe; width:80px; text-align:center; }
+  .override:focus { outline:none; border-color:#1a1a1a; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const DEFAULT_ITEMS = [
+  "Arugula","Spinach","Spring Mix","Romaine","White Mushroom",
+  "Portobello Mushroom","Crown Broccoli","Leeks","Zucchini",
+  "Snow Pea","Green Pepper","Avocado","Cooking Onion",
+  "Eggplant","Green Bean","Hot Pepper","Pineapple","Broccoli"
+];
+
+const toKey = (d) => d.toISOString().slice(0,10);
+const today = () => new Date();
+const fmt = (d) => new Date(d+"T12:00:00").toLocaleDateString("en-CA",{weekday:"short",month:"short",day:"numeric"});
+
+function getMissingDays(logs) {
+  const missing = [];
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  for (let i = 1; i <= 14; i++) {
+    d.setDate(d.getDate() - 1);
+    const k = toKey(d);
+    if (!logs[k]) missing.push(k);
+  }
+  return missing;
+}
+
+async function syncToSheets(webhookUrl, date, entry) {
+  if (!webhookUrl) return;
+  try {
+    await fetch(webhookUrl, {
+      method:"POST",
+      mode:"no-cors",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({date, entry})
+    });
+  } catch(e) {}
+}
+
+// Simple localStorage-based storage
+const storage = {
+  get: (key) => { try { const v = localStorage.getItem(key); return v ? {value: v} : null; } catch { return null; } },
+  set: (key, val) => { try { localStorage.setItem(key, val); return true; } catch { return false; } }
+};
+
+function App() {
+  const [view, setView] = useState("buyer");
+  const [logs, setLogs] = useState({});
+  const [webhook, setWebhook] = useState("");
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const r1 = storage.get("produce_logs");
+    if (r1) { try { setLogs(JSON.parse(r1.value)); } catch {} }
+    const r2 = storage.get("produce_webhook");
+    if (r2) setWebhook(r2.value);
+    setLoaded(true);
+  }, []);
+
+  const saveLogs = (next, date, entry) => {
+    setLogs(next);
+    storage.set("produce_logs", JSON.stringify(next));
+    if (webhook && date && entry) syncToSheets(webhook, date, entry);
+  };
+
+  const saveWebhook = (url) => {
+    setWebhook(url);
+    storage.set("produce_webhook", url);
+  };
+
+  if (!loaded) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:300,color:"#888",fontSize:13,letterSpacing:"0.05em"}}>
+      LOADING...
+    </div>
+  );
+
+  return (
+    <div style={{fontFamily:"'DM Mono',monospace",minHeight:"100vh",background:"#f7f5f0"}}>
+      <div style={{borderBottom:"1px solid #ddd",background:"#fff",padding:"16px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:10}}>
+        <div>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,letterSpacing:"0.02em",color:"#1a1a1a"}}>FERRARO</div>
+          <div style={{fontSize:10,color:"#888",letterSpacing:"0.15em",marginTop:1}}>WHOLESALE PRODUCE LOG</div>
+        </div>
+        <div style={{display:"flex",gap:0}}>
+          <button className={`tab${view==="buyer"?" active":""}`} onClick={()=>setView("buyer")}>BUYER</button>
+          <button className={`tab${view==="admin"?" active":""}`} onClick={()=>setView("admin")}>ADMIN</button>
+        </div>
+      </div>
+      {view==="buyer"
+        ? <BuyerView logs={logs} saveLogs={saveLogs} />
+        : <AdminView logs={logs} saveLogs={saveLogs} webhook={webhook} saveWebhook={saveWebhook} />
+      }
+    </div>
+  );
+}
+
+function BuyerView({ logs, saveLogs }) {
+  const [date, setDate] = useState(toKey(today()));
+  const [rows, setRows] = useState({});
+  const [oddItems, setOddItems] = useState([]);
+  const [submitted, setSubmitted] = useState(false);
+  const missing = getMissingDays(logs);
+
+  const loadEntry = (d, logData) => {
+    const existing = logData[d];
+    if (existing?.type === "order") {
+      const r = {}; const odd = [];
+      (existing.items||[]).forEach(it => {
+        if (DEFAULT_ITEMS.includes(it.name)) r[it.name] = {qty:it.qty, price:it.price||""};
+        else odd.push({name:it.name, qty:it.qty, price:it.price||""});
+      });
+      setRows(r); setOddItems(odd);
+    } else { setRows({}); setOddItems([]); }
+    setSubmitted(false);
+  };
+
+  useEffect(() => { loadEntry(date, logs); }, [date]);
+
+  const existing = logs[date];
+  const hasData = DEFAULT_ITEMS.some(n => rows[n]?.qty) || oddItems.some(o => o.name && o.qty);
+
+  const setRow = (name, field, val) => setRows(r => ({...r, [name]:{...(r[name]||{}), [field]:val}}));
+  const setOdd = (i, field, val) => setOddItems(arr => arr.map((o,j) => j===i ? {...o,[field]:val} : o));
+
+  const handleSubmit = () => {
+    const items = [
+      ...DEFAULT_ITEMS.filter(n => rows[n]?.qty && parseFloat(rows[n].qty) > 0)
+        .map(n => ({name:n, qty:parseFloat(rows[n].qty), price:rows[n].price?parseFloat(rows[n].price):null})),
+      ...oddItems.filter(o => o.name.trim() && o.qty && parseFloat(o.qty) > 0)
+        .map(o => ({name:o.name.trim(), qty:parseFloat(o.qty), price:o.price?parseFloat(o.price):null}))
+    ];
+    if (!items.length) return;
+    const entry = {type:"order", items, ts:Date.now()};
+    saveLogs({...logs, [date]:entry}, date, entry);
+    setSubmitted(true);
+  };
+
+  const handleNothing = () => {
+    const entry = {type:"none", ts:Date.now()};
+    saveLogs({...logs, [date]:entry}, date, entry);
+    setSubmitted(true);
+  };
+
+  return (
+    <div style={{maxWidth:520,margin:"0 auto",padding:"20px 16px"}}>
+      {missing.length > 0 && (
+        <div style={{background:"#fff8f0",border:"1px solid #f5c070",borderRadius:4,padding:"12px 16px",marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:500,letterSpacing:"0.1em",color:"#b07000",marginBottom:6}}>⚠ MISSING {missing.length} DAY{missing.length>1?"S":""}</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {missing.slice(0,5).map(d=>(
+              <button key={d} onClick={()=>setDate(d)}
+                style={{fontSize:11,padding:"3px 8px",background:"#fff",border:"1px solid #f5c070",borderRadius:3,cursor:"pointer",color:"#b07000",fontFamily:"'DM Mono',monospace",letterSpacing:"0.05em"}}>
+                {fmt(d)}
+              </button>
+            ))}
+            {missing.length > 5 && <span style={{fontSize:11,color:"#b07000",alignSelf:"center"}}>+{missing.length-5} more</span>}
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:10,color:"#888",letterSpacing:"0.12em",marginBottom:4}}>DATE</div>
+          <input type="date" value={date} max={toKey(today())}
+            onChange={e=>{ setDate(e.target.value); loadEntry(e.target.value, logs); }}
+            style={{width:"100%",padding:"8px 10px",border:"1px solid #ccc",fontFamily:"'DM Mono',monospace",fontSize:13,background:"#fff",borderRadius:3}} />
+        </div>
+        <div style={{paddingTop:18}}>
+          {existing ? (
+            <span style={{fontSize:10,letterSpacing:"0.1em",padding:"5px 10px",borderRadius:3,
+              background:existing.type==="order"?"#edf7ed":"#f0f0f0",
+              color:existing.type==="order"?"#2a7a2a":"#666",
+              border:`1px solid ${existing.type==="order"?"#b0d8b0":"#ccc"}`}}>
+              {existing.type==="order"?"✓ LOGGED":"✓ NOTHING"}
+            </span>
+          ) : (
+            <span style={{fontSize:10,letterSpacing:"0.1em",padding:"5px 10px",borderRadius:3,background:"#fff0f0",color:"#c04040",border:"1px solid #e8b0b0"}}>MISSING</span>
+          )}
+        </div>
+      </div>
+
+      {submitted ? (
+        <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:4,padding:32,textAlign:"center"}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#1a1a1a",marginBottom:8}}>✓</div>
+          <div style={{fontSize:12,letterSpacing:"0.1em",color:"#555"}}>LOGGED FOR {fmt(date).toUpperCase()}</div>
+          <button className="btn-ghost" style={{marginTop:20,width:"auto",padding:"8px 20px",fontSize:11}} onClick={()=>setSubmitted(false)}>EDIT</button>
+        </div>
+      ) : (
+        <>
+          <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:4,overflow:"hidden",marginBottom:16}}>
+            <div style={{padding:"10px 16px",borderBottom:"1px solid #eee",display:"grid",gridTemplateColumns:"1fr 68px 90px",gap:8,fontSize:10,color:"#888",letterSpacing:"0.12em"}}>
+              <span>ITEM</span><span style={{textAlign:"center"}}>QTY</span><span style={{textAlign:"center"}}>PRICE PAID</span>
+            </div>
+            {DEFAULT_ITEMS.map((name,i)=>(
+              <div key={name} style={{padding:"8px 16px",borderBottom:i<DEFAULT_ITEMS.length-1?"1px solid #f0f0f0":"none",display:"grid",gridTemplateColumns:"1fr 68px 90px",gap:8,alignItems:"center",background:rows[name]?.qty?"#fafff8":"transparent",transition:"background 0.1s"}}>
+                <span style={{fontSize:13,color:"#1a1a1a"}}>{name}</span>
+                <input className="num-in" type="number" min="0" step="0.5" placeholder="—"
+                  value={rows[name]?.qty||""} onChange={e=>setRow(name,"qty",e.target.value)} />
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <span style={{fontSize:11,color:"#aaa"}}>$</span>
+                  <input className="num-in" type="number" min="0" step="0.01" placeholder="—"
+                    value={rows[name]?.price||""} onChange={e=>setRow(name,"price",e.target.value)} />
+                </div>
+              </div>
+            ))}
+            {oddItems.map((o,i)=>(
+              <div key={i} style={{padding:"8px 16px",borderTop:"1px solid #f0f0f0",display:"grid",gridTemplateColumns:"1fr 68px 90px",gap:8,alignItems:"center",background:"#fffef5"}}>
+                <input className="txt-in" placeholder="Item name" value={o.name}
+                  onChange={e=>setOdd(i,"name",e.target.value)} />
+                <input className="num-in" type="number" min="0" step="0.5" placeholder="—"
+                  value={o.qty||""} onChange={e=>setOdd(i,"qty",e.target.value)} />
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <span style={{fontSize:11,color:"#aaa"}}>$</span>
+                  <input className="num-in" type="number" min="0" step="0.01" placeholder="—"
+                    value={o.price||""} onChange={e=>setOdd(i,"price",e.target.value)} />
+                </div>
+              </div>
+            ))}
+            <div style={{padding:"10px 16px",borderTop:"1px solid #f0f0f0"}}>
+              <button onClick={()=>setOddItems(a=>[...a,{name:"",qty:"",price:""}])}
+                style={{fontSize:11,color:"#888",background:"none",border:"1px dashed #ccc",borderRadius:3,padding:"5px 12px",cursor:"pointer",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em"}}>
+                + ADD ODD ITEM
+              </button>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:10,flexDirection:"column"}}>
+            <button className="btn-main" onClick={handleSubmit} disabled={!hasData}>SUBMIT ORDER</button>
+            <button className="btn-ghost" onClick={handleNothing}>NOTHING ORDERED TODAY</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AdminView({ logs, saveLogs, webhook, saveWebhook }) {
+  const [showWebhook, setShowWebhook] = useState(false);
+  const [webhookInput, setWebhookInput] = useState(webhook);
+  const [overrides, setOverrides] = useState({});
+
+  const missing = getMissingDays(logs);
+  const days = [];
+  const d = new Date(); d.setHours(0,0,0,0);
+  for (let i = 0; i < 30; i++) { days.push(toKey(new Date(d))); d.setDate(d.getDate()-1); }
+
+  const handleWebhookSave = () => { saveWebhook(webhookInput); setShowWebhook(false); };
+
+  const getTotal = (entry, dk) => {
+    if (!entry || entry.type !== "order") return null;
+    let t = 0; let has = false;
+    (entry.items||[]).forEach(it => {
+      const price = overrides[dk]?.[it.name] != null ? parseFloat(overrides[dk][it.name]) : it.price;
+      if (price != null && !isNaN(price)) { t += price * it.qty; has = true; }
+    });
+    return has ? t : null;
+  };
+
+  const grandTotal = days.reduce((sum,dk) => { const t = getTotal(logs[dk],dk); return t!=null?sum+t:sum; }, 0);
+  const orderDays = days.filter(dk => logs[dk]?.type==="order");
+  const setOverride = (dk, name, val) => setOverrides(o => ({...o, [dk]:{...(o[dk]||{}), [name]:val}}));
+
+  return (
+    <div style={{maxWidth:700,margin:"0 auto",padding:"20px 16px"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+        {[
+          {label:"MISSING",val:missing.length,color:missing.length>0?"#c04040":"#2a7a2a",bg:missing.length>0?"#fff0f0":"#edf7ed",border:missing.length>0?"#e8b0b0":"#b0d8b0"},
+          {label:"LOGGED (30D)",val:orderDays.length,color:"#1a1a1a",bg:"#fff",border:"#ddd"},
+          {label:"TOTAL (30D)",val:grandTotal>0?`$${grandTotal.toFixed(2)}`:"—",color:"#1a1a1a",bg:"#fff",border:"#ddd"},
+        ].map(s=>(
+          <div key={s.label} style={{background:s.bg,border:`1px solid ${s.border}`,borderRadius:4,padding:"12px 14px"}}>
+            <div style={{fontSize:9,letterSpacing:"0.14em",color:"#888",marginBottom:4}}>{s.label}</div>
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:s.color}}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {missing.length > 0 && (
+        <div style={{background:"#fff8f0",border:"1px solid #f5c070",borderRadius:4,padding:"12px 16px",marginBottom:16}}>
+          <div style={{fontSize:10,fontWeight:500,letterSpacing:"0.1em",color:"#b07000"}}>⚠ NOT SUBMITTED: {missing.map(fmt).join(", ")}</div>
+        </div>
+      )}
+
+      <div style={{marginBottom:16,display:"flex",gap:10,alignItems:"center"}}>
+        <button className="btn-ghost" style={{fontSize:11,width:"auto",padding:"8px 16px"}} onClick={()=>setShowWebhook(!showWebhook)}>
+          {showWebhook?"▲ HIDE":"▼ GOOGLE SHEETS SYNC"}
+        </button>
+        {webhook && <span style={{fontSize:10,color:"#2a7a2a",letterSpacing:"0.08em"}}>✓ CONNECTED</span>}
+      </div>
+
+      {showWebhook && (
+        <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:4,padding:16,marginBottom:20}}>
+          <div style={{fontSize:10,letterSpacing:"0.12em",color:"#888",marginBottom:8}}>APPS SCRIPT WEBHOOK URL</div>
+          <div style={{display:"flex",gap:8}}>
+            <input className="webhook-in" placeholder="https://script.google.com/macros/s/..." value={webhookInput} onChange={e=>setWebhookInput(e.target.value)} />
+            <button className="btn-main" style={{width:"auto",padding:"8px 16px",fontSize:11,whiteSpace:"nowrap"}} onClick={handleWebhookSave}>SAVE</button>
+          </div>
+          <div style={{fontSize:10,color:"#888",marginTop:8,lineHeight:1.6}}>Paste the deployment URL from your Google Apps Script. Each submission will sync automatically.</div>
+        </div>
+      )}
+
+      <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:4,overflow:"hidden"}}>
+        <div style={{padding:"10px 16px",borderBottom:"1px solid #eee",display:"grid",gridTemplateColumns:"120px 1fr auto",gap:8,fontSize:10,color:"#888",letterSpacing:"0.12em"}}>
+          <span>DATE</span><span>ITEMS</span><span>TOTAL</span>
+        </div>
+        {days.map(dk => {
+          const entry = logs[dk];
+          const total = getTotal(entry, dk);
+          return (
+            <div key={dk} style={{borderBottom:"1px solid #f0f0f0",padding:"10px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:entry?.type==="order"?8:0}}>
+                <span style={{fontSize:12,color:"#1a1a1a",fontWeight:500}}>{fmt(dk)}</span>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  {total!=null && <span style={{fontSize:13,color:"#2a7a2a",fontWeight:500}}>${total.toFixed(2)}</span>}
+                  <span style={{fontSize:10,padding:"2px 8px",borderRadius:3,letterSpacing:"0.08em",
+                    background:!entry?"#fff0f0":entry.type==="order"?"#edf7ed":"#f5f5f5",
+                    color:!entry?"#c04040":entry.type==="order"?"#2a7a2a":"#666",
+                    border:`1px solid ${!entry?"#e8b0b0":entry.type==="order"?"#b0d8b0":"#ddd"}`}}>
+                    {!entry?"MISSING":entry.type==="order"?"ORDERED":"NOTHING"}
+                  </span>
+                </div>
+              </div>
+              {entry?.type==="order" && (
+                <div style={{display:"grid",gap:6}}>
+                  {(entry.items||[]).map(it => {
+                    const ov = overrides[dk]?.[it.name];
+                    const displayPrice = ov!=null ? parseFloat(ov) : it.price;
+                    const lineTotal = displayPrice!=null && !isNaN(displayPrice) ? (displayPrice*it.qty).toFixed(2) : null;
+                    return (
+                      <div key={it.name} style={{display:"grid",gridTemplateColumns:"1fr 50px 90px 70px",gap:8,alignItems:"center",fontSize:12}}>
+                        <span style={{color:"#444"}}>{it.name} <span style={{color:"#999"}}>×{it.qty}</span></span>
+                        <span style={{fontSize:11,color:"#999",textAlign:"right"}}>$/unit</span>
+                        <div style={{display:"flex",alignItems:"center",gap:3}}>
+                          <span style={{fontSize:11,color:"#aaa"}}>$</span>
+                          <input className="override" type="number" min="0" step="0.01"
+                            placeholder={it.price!=null?it.price:"—"}
+                            value={ov!=null?ov:(it.price!=null?it.price:"")}
+                            onChange={e=>setOverride(dk,it.name,e.target.value)} />
+                        </div>
+                        <span style={{fontSize:12,color:lineTotal?"#2a7a2a":"#ccc",textAlign:"right",fontWeight:500}}>
+                          {lineTotal?`$${lineTotal}`:"—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
