@@ -64,7 +64,7 @@ async function syncToSheets(webhookUrl, date, entry) {
     await fetch(webhookUrl, {
       method:"POST",
       mode:"no-cors",
-      headers:{"Content-Type":"application/json"},
+      headers:{"Content-Type":"text/plain"},
       body:JSON.stringify({date, entry})
     });
   } catch(e) {}
