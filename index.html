@@ -62,7 +62,7 @@ function getMissingDays(logs) {
 const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7ho7YgKj_AJ6HDpBjyAUAeODyQXv9VXUABzGPX_D5U2V_skMEhfnLkWFpH3i5ZfDb/exec";
 
 async function syncToSheets(date, entry) {
-  if (!WEBHOOK_URL || WEBHOOK_URL === "https://script.google.com/macros/s/AKfycbx7ho7YgKj_AJ6HDpBjyAUAeODyQXv9VXUABzGPX_D5U2V_skMEhfnLkWFpH3i5ZfDb/exec") return;
+  if (!WEBHOOK_URL) return;
   try {
     const payload = encodeURIComponent(JSON.stringify({date, entry}));
     await fetch(`${WEBHOOK_URL}?data=${payload}`, { mode:"no-cors" });
