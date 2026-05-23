@@ -58,11 +58,14 @@ function getMissingDays(logs) {
   return missing;
 }
 
-async function syncToSheets(webhookUrl, date, entry) {
-  if (!webhookUrl) return;
+// paste your Apps Script deployment URL below
+const WEBHOOK_URL = "YOUR_APPS_SCRIPT_URL_HERE";
+
+async function syncToSheets(date, entry) {
+  if (!WEBHOOK_URL || WEBHOOK_URL === "YOUR_APPS_SCRIPT_URL_HERE") return;
   try {
     const payload = encodeURIComponent(JSON.stringify({date, entry}));
-    await fetch(`${webhookUrl}?data=${payload}`, { mode:"no-cors" });
+    await fetch(`${WEBHOOK_URL}?data=${payload}`, { mode:"no-cors" });
   } catch(e) {}
 }
 
@@ -75,26 +78,18 @@ const storage = {
 function App() {
   const [view, setView] = useState("buyer");
   const [logs, setLogs] = useState({});
-  const [webhook, setWebhook] = useState("");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const r1 = storage.get("produce_logs");
     if (r1) { try { setLogs(JSON.parse(r1.value)); } catch {} }
-    const r2 = storage.get("produce_webhook");
-    if (r2) setWebhook(r2.value);
     setLoaded(true);
   }, []);
 
   const saveLogs = (next, date, entry) => {
     setLogs(next);
     storage.set("produce_logs", JSON.stringify(next));
-    if (webhook && date && entry) syncToSheets(webhook, date, entry);
-  };
-
-  const saveWebhook = (url) => {
-    setWebhook(url);
-    storage.set("produce_webhook", url);
+    if (date && entry) syncToSheets(date, entry);
   };
 
   if (!loaded) return (
@@ -117,7 +112,7 @@ function App() {
       </div>
       {view==="buyer"
         ? <BuyerView logs={logs} saveLogs={saveLogs} />
-        : <AdminView logs={logs} saveLogs={saveLogs} webhook={webhook} saveWebhook={saveWebhook} />
+        : <AdminView logs={logs} saveLogs={saveLogs} />
       }
     </div>
   );
@@ -262,17 +257,13 @@ function BuyerView({ logs, saveLogs }) {
   );
 }
 
-function AdminView({ logs, saveLogs, webhook, saveWebhook }) {
-  const [showWebhook, setShowWebhook] = useState(false);
-  const [webhookInput, setWebhookInput] = useState(webhook);
+function AdminView({ logs, saveLogs }) {
   const [overrides, setOverrides] = useState({});
 
   const missing = getMissingDays(logs);
   const days = [];
   const d = new Date(); d.setHours(0,0,0,0);
   for (let i = 0; i < 30; i++) { days.push(toKey(new Date(d))); d.setDate(d.getDate()-1); }
-
-  const handleWebhookSave = () => { saveWebhook(webhookInput); setShowWebhook(false); };
 
   const getTotal = (entry, dk) => {
     if (!entry || entry.type !== "order") return null;
@@ -306,24 +297,6 @@ function AdminView({ logs, saveLogs, webhook, saveWebhook }) {
       {missing.length > 0 && (
         <div style={{background:"#fff8f0",border:"1px solid #f5c070",borderRadius:4,padding:"12px 16px",marginBottom:16}}>
           <div style={{fontSize:10,fontWeight:500,letterSpacing:"0.1em",color:"#b07000"}}>⚠ NOT SUBMITTED: {missing.map(fmt).join(", ")}</div>
-        </div>
-      )}
-
-      <div style={{marginBottom:16,display:"flex",gap:10,alignItems:"center"}}>
-        <button className="btn-ghost" style={{fontSize:11,width:"auto",padding:"8px 16px"}} onClick={()=>setShowWebhook(!showWebhook)}>
-          {showWebhook?"▲ HIDE":"▼ GOOGLE SHEETS SYNC"}
-        </button>
-        {webhook && <span style={{fontSize:10,color:"#2a7a2a",letterSpacing:"0.08em"}}>✓ CONNECTED</span>}
-      </div>
-
-      {showWebhook && (
-        <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:4,padding:16,marginBottom:20}}>
-          <div style={{fontSize:10,letterSpacing:"0.12em",color:"#888",marginBottom:8}}>APPS SCRIPT WEBHOOK URL</div>
-          <div style={{display:"flex",gap:8}}>
-            <input className="webhook-in" placeholder="https://script.google.com/macros/s/..." value={webhookInput} onChange={e=>setWebhookInput(e.target.value)} />
-            <button className="btn-main" style={{width:"auto",padding:"8px 16px",fontSize:11,whiteSpace:"nowrap"}} onClick={handleWebhookSave}>SAVE</button>
-          </div>
-          <div style={{fontSize:10,color:"#888",marginTop:8,lineHeight:1.6}}>Paste the deployment URL from your Google Apps Script. Each submission will sync automatically.</div>
         </div>
       )}
 
