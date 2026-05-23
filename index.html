@@ -61,12 +61,8 @@ function getMissingDays(logs) {
 async function syncToSheets(webhookUrl, date, entry) {
   if (!webhookUrl) return;
   try {
-    await fetch(webhookUrl, {
-      method:"POST",
-      mode:"no-cors",
-      headers:{"Content-Type":"text/plain"},
-      body:JSON.stringify({date, entry})
-    });
+    const payload = encodeURIComponent(JSON.stringify({date, entry}));
+    await fetch(`${webhookUrl}?data=${payload}`, { mode:"no-cors" });
   } catch(e) {}
 }
 
